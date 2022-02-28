@@ -16,9 +16,10 @@ library(tidyverse)
 #' @example `verse_counts <- read_data('verse_counts.tsv')`
 
 read_data <- function(filename){
-  return(NULL)
+  verse_counts_tbl <- read_tsv(filename)
+  head(verse_counts_tbl)
+  return(verse_counts_tbl)
 }
-
 
 #' Filter out genes with zero variance
 #'
@@ -33,9 +34,10 @@ read_data <- function(filename){
 #' @example `filtered_counts <- filter_zero_var_genes(verse_counts)`
 
 filter_zero_var_genes <- function(verse_counts) {
-  return(NULL)
+  verse_counts$var <- rowVars(as.matrix(verse_counts[,c(-1)]))
+  pos <- which(verse_counts$var!=0)
+  return(select(verse_counts, -var)[pos,])
 }
-
 
 #' Extract time point information from sample name
 #'
@@ -48,7 +50,7 @@ filter_zero_var_genes <- function(verse_counts) {
 #' output:`"Ad"`
 
 timepoint_from_sample <- function(str) {
-  return(NULL)
+  return(substr(str, 2, 3))
 }
 
 
@@ -64,9 +66,8 @@ timepoint_from_sample <- function(str) {
 #' output: `"1"`
 
 sample_replicate <- function(str) {
-  return(NULL)
+  return(substr(str, 5, 5))
 }
-
 
 #' Generate sample-level metadata from sample names. 
 #' 
@@ -86,9 +87,10 @@ sample_replicate <- function(str) {
 #' @example `meta <- meta_info_from_labels(colnames(count_data)[colnames(count_data)!='gene'])`
 
 meta_info_from_labels <- function(sample_names) {
-  return(NULL)
+  timepoint <- timepoint_from_sample(sample_names)
+  replicate <- sample_replicate(sample_names)
+  return(tibble(sample=sample_names, timepoint, replicate))
 }
-
 
 #' Calculate total read counts for each sample in a count data.
 #'
@@ -100,9 +102,9 @@ meta_info_from_labels <- function(sample_names) {
 #' @examples `get_library_size(count_data)`
 
 get_library_size <- function(count_data) {
-  return(NULL)
+  lib_size <- apply(count_data[-1], 2,sum)
+  return(lib_size)
 }
-
 
 #' Normalize raw count data to counts per million WITH pseudocounts using the 
 #' following formula:
@@ -117,10 +119,14 @@ get_library_size <- function(count_data) {
 #' @examples
 #' `normalize_by_cpm(count_data)`
 
-normalize_by_cpm <- function(count_data) { 
-  return(NULL)
+normalize_by_cpm <- function(count_data) {
+  #3 a.
+  cpm <- apply(count_data[,c(-1)],2, function(x) (x/sum(x))*1000000)
+  cpm_tbl <- as.tibble(cpm)
+  cpm_tbl$gene <- count_data$gene
+  cpm_tbl <- relocate(cpm_tbl, gene, 1)
+  return(cpm_tbl)
 }
-
 
 #' Normalize raw count data using DESeq2
 #'
@@ -135,9 +141,17 @@ normalize_by_cpm <- function(count_data) {
 #' @example ' `deseq_normalize(count_data, meta_data, ~ timepoint)`
 
 deseq_normalize <- function(count_data, meta_data, design_formula) {
-  return(NULL)
+  # if I do design = design_formula, the test was giving me a warning, hence I did design = ~1
+  # as suggested in the assignment sample report
+  # dds <- DESeqDataSetFromMatrix(countData = count_data[-1], colData = meta_data, design = design_formula)
+  dds <- DESeqDataSetFromMatrix(countData = count_data[-1], colData = meta_data, design = ~1)
+  dds <- estimateSizeFactors(dds)
+  norm_counts <- counts(dds, normalized=TRUE)
+  norm_counts_tbl <- as.tibble(norm_counts)
+  norm_counts_tbl$gene <- count_data$gene
+  norm_counts_tbl <- relocate(norm_counts_tbl, gene, 1)
+  return(norm_counts_tbl)
 }
-
 
 #' Perform and plot PCA using processed data.
 #' 
@@ -155,9 +169,21 @@ deseq_normalize <- function(count_data, meta_data, design_formula) {
 #' `plot_pca(data, meta, "Raw Count PCA")`
 
 plot_pca <- function(data, meta, title="") {
-  return(NULL)
+  t_data <- t(data)
+  pca <- prcomp(t_data)
+  pca_var <- pca$sdev**2 / sum(pca$sdev**2)
+  x_label <- paste0("PC1: ",round(pca_var[1]*100, 2),"% variance")
+  y_label <- paste0("PC2: ",round(pca_var[2]*100, 2),"% variance")
+  pca_plot_data <- meta
+  pca_plot_data$PC1 <- pca$x[,1]
+  pca_plot_data$PC2 <- pca$x[,2]
+  pca_plot <- ggplot(pca_plot_data, aes(x=PC1, y=PC2, col=timepoint)) +
+    geom_point() +
+    xlab(x_label) +
+    ylab(y_label) +
+    ggtitle(title)
+  return(pca_plot)
 }
-
 
 #' Plot gene count distributions for each sample using boxplots.
 #' 
@@ -172,9 +198,18 @@ plot_pca <- function(data, meta, title="") {
 #' @example `plot_sample_distributions(data, scale_y_axis=TRUE, title='Raw Count Distributions')`
 
 plot_sample_distributions <- function(data, scale_y_axis=FALSE, title="") {
-  return(NULL)
+  long_data <- data %>% gather(samples, counts)
+  if(scale_y_axis) {
+    long_data <- filter(long_data, counts!=0)
+  }
+  gene_count_box_plot <- ggplot(long_data, aes(x=samples, y=counts, color=samples)) + 
+    geom_boxplot() +
+    ggtitle(title)
+  if(scale_y_axis) {
+    gene_count_box_plot <- gene_count_box_plot + scale_y_log10()
+  }
+  return(gene_count_box_plot)
 }
-
 
 #' Plot relationship between mean read counts and variability over all genes.
 #'
@@ -193,5 +228,19 @@ plot_sample_distributions <- function(data, scale_y_axis=FALSE, title="") {
 #' @example `plot_variance_vs_mean(data, scale_y_axis=TRUE, title='variance vs mean (raw counts)')`
 
 plot_variance_vs_mean <- function(data, scale_y_axis=FALSE, title="") {
-  return(NULL)
+  gene_means <- rowMeans(as.matrix(data))
+  gene_vars <- rowVars(as.matrix(data))
+  var_mean_data <- tibble(mean=gene_means, var=gene_vars)
+  var_mean_data$rank <- rank(var_mean_data$mean)
+  var_mean_plot <- ggplot(var_mean_data, aes(x=rank, y=var)) +
+    geom_point(alpha=0.4) +
+    geom_smooth(method='gam', formula = y ~ s(x, bs = "cs")) +
+    xlab("Rank(Mean)") +
+    ylab("Variance") +
+    ggtitle(title)
+  
+  if (scale_y_axis) {
+    var_mean_plot <- var_mean_plot + scale_y_log10()
+  }
+  return(var_mean_plot)
 }

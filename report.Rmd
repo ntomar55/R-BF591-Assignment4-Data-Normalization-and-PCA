@@ -25,6 +25,8 @@ markdown environments when grading them.
 
 ```{r setup, include=FALSE, results='hide'}
 #Source your main
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE)
+source("main.R")
 
 ```
 
@@ -40,15 +42,17 @@ to reduce the size of our dataset if memory issues are a constraint.
 ### 1a. import data
 ```{r}
 #Read in verse_counts.tsv and display the head of the resulting tibble
-
+v_counts <- read_data('verse_counts.tsv')
 #Display the top 10 rows of verse counts
+knitr::kable(head(v_counts))
 ```
 
 ### 1b. Apply filter_zero_var_genes()
 ```{r}
 #Filter out zero variance genes using the function you created in `main.R
-
+filt_v_counts <- filter_zero_var_genes(v_counts)
 #display the head of the counts data from the zero variance filter function's output
+knitr::kable(head(filt_v_counts))
 ```
 
 ## 2. Constructing sample meta data from sample names
@@ -67,7 +71,8 @@ with all the relevant information.
 
 ```{r}
 #Create and display the sample meta data tibble
-
+metadata <- meta_info_from_labels(colnames(filt_v_counts[-1]))
+knitr::kable(metadata)
 ```
 
 ## 3. Normalization
@@ -102,8 +107,15 @@ the barplot or write the code in the RMarkdown at your discretion.
 
 ```{r}
 #Calculate the number of reads in each sample and plot as a barplot
-
+lib_s <- get_library_size(filt_v_counts)
 #Make a barplot showing the number of millions of reads for each sample
+lib_size_tibl <- as.tibble(lib_s)
+lib_size_tibl$value <- lib_size_tibl$value/10^6
+lib_size_tibl$Samples <- names(filt_v_counts[-1])
+plot <- ggplot(lib_size_tibl, aes(x=Samples,y=value,fill=Samples)) +
+geom_bar(stat="identity") +
+ylab("# reads")
+plot
 ```
 
 #### CPM calculation
@@ -113,7 +125,8 @@ the provided formula.
 
 ```{r}
 #Normalize your filtered counts matrix with CPM and display the head
-
+cpm_tbl <- normalize_by_cpm(filt_v_counts)
+knitr::kable(head(cpm_tbl))
 ```
 
 ### 3b. Normalizing with DESeq2
@@ -135,7 +148,9 @@ may pass `~1` as the design formula to pass a trivial formula when creating the
 
 ```{r}
 #Normalize your filtered data and display the head of the resulting tibble
+norm_deseq <- deseq_normalize(filt_v_counts, metadata)
 
+knitr::kable(head(norm_deseq))
 ```
 
 ## 4 Visualization
@@ -153,7 +168,8 @@ function is able to scale the y-axis to $log10$ values if specified by the
 
 ```{r}
 #Create and display your count distributions boxplot
-
+sample_names <- filt_v_counts[-1]
+plot_sample_distributions(sample_names, TRUE, "Sample Distributions (Log10(Raw Counts))")
 ```
 
 ### 4b. Count variance vs mean count
@@ -171,7 +187,7 @@ rank $1$.
 
 ```{r}
 #Create and display your variance vs mean plot
-
+plot_variance_vs_mean(sample_names, TRUE, "Variance vs. Mean (Log10(Raw Counts))")
 ```
 
 ### 4c. Visualizing patterns with PCA
@@ -187,7 +203,7 @@ where each dot represents a sample and is colored by its respective sample name.
 
 ```{r}
 #Create and display your PCA plot
-
+plot_pca(sample_names, metadata, 'Raw Counts PCA')
 ```
 
 ### 5. Visualizing CPM
@@ -206,6 +222,9 @@ to `scale_y_axis` when calling functions that have that parameter.
 
 ```{r}
 #Create and display 3 plots of your cpm matrix: Sample Distribution, Variance vs Mean, and PCA
+plot_sample_distributions(cpm_tbl[-1], TRUE, "Sample Distribution (log10(CPM))")
+plot_variance_vs_mean(cpm_tbl[-1], TRUE, "Variance vs Mean (log10(CPM))")
+plot_pca(cpm_tbl[-1], metadata, 'CPM PCA')
 
 ```
 
@@ -224,5 +243,8 @@ display your Sample Distribution, Variance vs Mean, and PCA plots.
 
 ```{r}
 #Create and display 3 plots of your deseq-normalized data: Sample Distribution, Variance vs Mean, and PCA
+plot_sample_distributions(norm_deseq[-1], TRUE, "Sample Distribution (log10(DESeq2 norm counts)")
+plot_variance_vs_mean(norm_deseq[-1], TRUE, "Variance vs Mean (DESeq2)")
+plot_pca(norm_deseq[-1], metadata, 'DESeq2 Normalized PCA')
 
 ```
